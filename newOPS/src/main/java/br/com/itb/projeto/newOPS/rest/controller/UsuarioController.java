@@ -72,7 +72,7 @@ public class UsuarioController {
         String rm = usuario.getRm();
         String senha = usuario.getSenha();
 
-        Usuario _usuario = usuarioService.login(email, rm, senha);
+        Usuario _usuario = usuarioService._login(email, rm, senha);
 
         if (_usuario == null) {
             throw new ResourceNotFoundException("*** Dados Incorretos! ***");

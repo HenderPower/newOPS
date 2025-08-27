@@ -15,182 +15,196 @@ import br.com.itb.projeto.newOPS.model.repository.UsuarioRepository;
 
 public class UsuarioService {
 
-    private UsuarioRepository usuarioRepository;
+	private UsuarioRepository usuarioRepository;
 
-    public UsuarioService(UsuarioRepository usuarioRepository) {
-        super();
-        this.usuarioRepository = usuarioRepository;
-    }
+	public UsuarioService(UsuarioRepository usuarioRepository) {
+		super();
+		this.usuarioRepository = usuarioRepository;
+	}
 
-    public Usuario findById(long id) {
-        Optional<Usuario> usuario = usuarioRepository.findById(id);
+	public Usuario findById(long id) {
+		Optional<Usuario> usuario = usuarioRepository.findById(id);
 
-        if (usuario.isPresent()) {
-            return usuario.get();
-        }
+		if (usuario.isPresent()) {
+			return usuario.get();
+		}
 
-        return null;
-    }
+		return null;
+	}
 
+	public List<Usuario> findAll() {
+		List<Usuario> usuarios = usuarioRepository.findAll();
+		return usuarios;
+	}
 
+	public void deleteById(long id) {
+		if (usuarioRepository.existsById(id)) {
+			usuarioRepository.deleteById(id);
+		} else {
+			throw new RuntimeException("Usuario não encontrado com o ID: " + id);
+		}
+	}
 
+	public Usuario save(Usuario usuario) {
 
-    public List<Usuario> findAll(){
-        List<Usuario> usuarios = usuarioRepository.findAll();
-        return usuarios;
-    }
+		Usuario _usuario = null;
 
-    public void deleteById(long id) {
-        if (usuarioRepository.existsById(id)) {
-            usuarioRepository.deleteById(id);
-        } else {
-            throw new RuntimeException("Usuario não encontrado com o ID: " + id);
-        }
-    }
+		if (usuario.getEmail().equals("")) {
+			_usuario = usuarioRepository.findByRm(usuario.getRm());
+		} else {
+			_usuario = usuarioRepository.findByEmail(usuario.getEmail());
+		}
 
-    public Usuario save(Usuario usuario) {
+		if (_usuario == null) {
 
-        Usuario _usuario = usuarioRepository.findByEmailOrRm(usuario.getEmail(), usuario.getRm());
+			String senha = Base64.getEncoder().encodeToString(usuario.getSenha().getBytes());
 
+			usuario.setSenha(senha);
+			usuario.setDataCadastro(LocalDateTime.now());
+			usuario.setStatusUsuario("ATIVO");
 
-        if (_usuario == null) {
+			if (usuario.getNivelAcesso().equals("ALUNO")) {
+				String email = "rm" + usuario.getRm() + "@estudante.fieb.edu.br";
+				usuario.setEmail(email);
+			} else {
+				usuario.setRm(null);
+			}
 
-            String senha = Base64.getEncoder()
-                    .encodeToString(usuario.getSenha().getBytes());
+			return usuarioRepository.save(usuario);
+		}
 
-            usuario.setSenha(senha);
-            usuario.setDataCadastro(LocalDateTime.now());
-            usuario.setStatusUsuario("ATIVO");
+		return null;
+	}
 
-            if (usuario.getNivelAcesso().equals("ALUNO")) {
-                String email = "rm" + usuario.getRm() + "@estudante.fieb.edu.br";
-                usuario.setEmail(email);
-            }
+	@Transactional
+	public Usuario login(String email, String rm, String senha) {
 
-            return usuarioRepository.save(usuario);
-        }
+		// Verifica se senha foi informada
+		if (senha == null || senha.isEmpty()) {
+			return null; // Senha é obrigatória
+		}
 
+		// Verifica se apenas um dos dois (email ou RM) foi informado
+		boolean isEmailProvided = email != null && !email.isEmpty();
+		boolean isRmProvided = rm != null && !rm.isEmpty();
 
+		if (isEmailProvided == isRmProvided) {
+			// Se ambos forem informados ou ambos nulos, retorna null
+			return null;
+		}
 
-        return null;
-    }
+		Usuario _usuario = null;
 
-    @Transactional
-    public Usuario login(String email, String rm, String senha) {
+		if (isEmailProvided) {
+			// Login de técnico/administrador
+			_usuario = usuarioRepository.findByEmail(email);
+			if (_usuario != null && !_usuario.getNivelAcesso().equalsIgnoreCase("PROFESSOR")
+					&& !_usuario.getNivelAcesso().equalsIgnoreCase("ADMIN")) {
+				return null; // E-mail não pertence a técnico/admin
+			}
+		} else {
+			// Login de aluno por RM
+			_usuario = usuarioRepository.findByRm(rm);
+			if (_usuario != null && !_usuario.getNivelAcesso().equalsIgnoreCase("ALUNO")) {
+				return null; // RM não pertence a aluno
+			}
+		}
 
-        // Verifica se senha foi informada
-        if (senha == null || senha.isEmpty()) {
-            return null; // Senha é obrigatória
-        }
+		if (_usuario != null && "ATIVO".equalsIgnoreCase(_usuario.getStatusUsuario())) {
+			byte[] decodedPass = Base64.getDecoder().decode(_usuario.getSenha());
 
-        // Verifica se apenas um dos dois (email ou RM) foi informado
-        boolean isEmailProvided = email != null && !email.isEmpty();
-        boolean isRmProvided = rm != null && !rm.isEmpty();
+			if (new String(decodedPass).equals(senha)) {
+				return _usuario;
+			}
+		}
 
-        if (isEmailProvided == isRmProvided) {
-            // Se ambos forem informados ou ambos nulos, retorna null
-            return null;
-        }
+		return null;
+	}
 
-        Usuario _usuario = null;
+	@Transactional
+	public Usuario _login(String email, String rm, String senha) {
 
-        if (isEmailProvided) {
-            // Login de técnico/administrador
-            _usuario = usuarioRepository.findByEmail(email);
-            if (_usuario != null && !_usuario.getNivelAcesso().equalsIgnoreCase("TECNICO")
-                    && !_usuario.getNivelAcesso().equalsIgnoreCase("ADMIN")) {
-                return null; // E-mail não pertence a técnico/admin
-            }
-        } else {
-            // Login de aluno por RM
-            _usuario = usuarioRepository.findByRm(rm);
-            if (_usuario != null && !_usuario.getNivelAcesso().equalsIgnoreCase("ALUNO")) {
-                return null; // RM não pertence a aluno
-            }
-        }
+		Usuario usuario = null;
 
-        if (_usuario != null && "ATIVO".equalsIgnoreCase(_usuario.getStatusUsuario())) {
-            byte[] decodedPass = Base64.getDecoder().decode(_usuario.getSenha());
+		if (email == null) {
+			usuario = usuarioRepository.findByRm(rm);
+		} else {
+			usuario = usuarioRepository.findByEmail(email);
+		}
 
-            if (new String(decodedPass).equals(senha)) {
-                return _usuario;
-            }
-        }
+		if (usuario != null) {
+			if (!usuario.getStatusUsuario().equals("INATIVO")) {
+				byte[] decodedPass = Base64.getDecoder().decode(usuario.getSenha());
 
-        return null;
-    }
+				if (new String(decodedPass).equals(senha)) {
+					return usuario;
+				}
+			}
+		}
+		return null;
+	}
 
-    @Transactional
-    public Usuario alterarSenha(long id, Usuario usuario) {
-        Optional<Usuario> _usuario = usuarioRepository.findById(id);
+	@Transactional
+	public Usuario alterarSenha(long id, Usuario usuario) {
+		Optional<Usuario> _usuario = usuarioRepository.findById(id);
 
-        if (_usuario.isPresent()) {
-            Usuario usuarioAtualizado = _usuario.get();
+		if (_usuario.isPresent()) {
+			Usuario usuarioAtualizado = _usuario.get();
 
-            String senha = Base64.getEncoder()
-                    .encodeToString(usuario.getSenha().getBytes());
+			String senha = Base64.getEncoder().encodeToString(usuario.getSenha().getBytes());
 
-            usuarioAtualizado.setSenha(senha);
-            usuarioAtualizado.setDataCadastro(LocalDateTime.now());
-            usuarioAtualizado.setStatusUsuario("ATIVO");
+			usuarioAtualizado.setSenha(senha);
+			usuarioAtualizado.setDataCadastro(LocalDateTime.now());
+			usuarioAtualizado.setStatusUsuario("ATIVO");
 
-            return usuarioRepository.save(usuarioAtualizado);
+			return usuarioRepository.save(usuarioAtualizado);
 
+		}
+		return null;
+	}
 
+	@Transactional
+	public Usuario inativar(long id) {
+		Optional<Usuario> _usuario = usuarioRepository.findById(id);
 
-        }
-        return null;
-    }
+		String senhaPadrao = "12345678";
 
-    @Transactional
-    public Usuario inativar(long id) {
-        Optional<Usuario> _usuario = usuarioRepository.findById(id);
+		if (_usuario.isPresent()) {
+			Usuario usuarioAtualizado = _usuario.get();
 
-        String senhaPadrao = "12345678";
+			String senha = Base64.getEncoder().encodeToString(senhaPadrao.getBytes());
 
-        if (_usuario.isPresent()) {
-            Usuario usuarioAtualizado = _usuario.get();
+			usuarioAtualizado.setSenha(senha);
+			usuarioAtualizado.setDataCadastro(LocalDateTime.now());
+			usuarioAtualizado.setStatusUsuario("INATIVO");
 
-            String senha = Base64.getEncoder()
-                    .encodeToString(senhaPadrao.getBytes());
+			return usuarioRepository.save(usuarioAtualizado);
 
-            usuarioAtualizado.setSenha(senha);
-            usuarioAtualizado.setDataCadastro(LocalDateTime.now());
-            usuarioAtualizado.setStatusUsuario("INATIVO");
+		}
 
-            return usuarioRepository.save(usuarioAtualizado);
+		return null;
+	}
 
+	@Transactional
+	public Usuario reativar(long id) {
+		Optional<Usuario> _usuario = usuarioRepository.findById(id);
 
+		String senhaPadrao = "12345678";
 
-        }
+		if (_usuario.isPresent()) {
+			Usuario usuarioAtualizado = _usuario.get();
 
-        return null;
-    }
+			String senha = Base64.getEncoder().encodeToString(senhaPadrao.getBytes());
 
+			usuarioAtualizado.setSenha(senha);
+			usuarioAtualizado.setDataCadastro(LocalDateTime.now());
+			usuarioAtualizado.setStatusUsuario("REATIVO");
 
-    @Transactional
-    public Usuario reativar(long id) {
-        Optional<Usuario> _usuario = usuarioRepository.findById(id);
+			return usuarioRepository.save(usuarioAtualizado);
 
-        String senhaPadrao = "12345678";
+		}
 
-        if (_usuario.isPresent()) {
-            Usuario usuarioAtualizado = _usuario.get();
-
-            String senha = Base64.getEncoder()
-                    .encodeToString(senhaPadrao.getBytes());
-
-            usuarioAtualizado.setSenha(senha);
-            usuarioAtualizado.setDataCadastro(LocalDateTime.now());
-            usuarioAtualizado.setStatusUsuario("REATIVO");
-
-            return usuarioRepository.save(usuarioAtualizado);
-
-
-
-        }
-
-        return null;
-    }
+		return null;
+	}
 
 }
